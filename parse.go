@@ -1,17 +1,19 @@
 package goderp
 
 import (
-	"container/list"
 	"fmt"
 	"github.com/BurntSushi/toml"
 	"os"
 	"reflect"
 	"strconv"
+	"strings"
+	"unicode/utf8"
 )
 
 type Info struct {
 	descr string
 	group string
+	def   interface{}
 }
 
 type Config struct {
@@ -35,7 +37,7 @@ func (c *Config) EnableEnv() {
 func (c *Config) Define(key string, value interface{}, descr string, group string) {
 	c.Records[key] = value
 	//fmt.Printf("%s:(%s) %s\n", key, reflect.TypeOf(c.Records[key]), c.Records[key])
-	c.Descriptions[key] = Info{descr: descr, group: group}
+	c.Descriptions[key] = Info{descr: descr, group: group, def: value}
 }
 
 func (c *Config) Get(key string) interface{} {
@@ -66,6 +68,10 @@ func (c *Config) GetGroup(key string) string {
 	return c.Descriptions[key].group
 }
 
+func (c *Config) GetDefault(key string) interface{} {
+	return c.Descriptions[key].def
+}
+
 func (c *Config) Parse(filename string) (err error) {
 
 	if _, err := toml.DecodeFile(filename, &c.Records); err != nil {
@@ -88,19 +94,44 @@ func (c *Config) Parse(filename string) (err error) {
 }
 
 func (c *Config) Dump() {
-    groupkeys := map[string][]string
-    var group string 
+	groupkeys := make(map[string][]string)
+	var group string
 	for k := range c.Records {
-        group = c.GetGroup(k)
-        if _, ok := groupkeys[group]; !ok{
-            groupkeys[group] = make([]string,1)
-        }
-        groupkeys[group] = append(groupkeys[group],k)
+		group = c.GetGroup(k)
+		if _, ok := groupkeys[group]; !ok {
+			groupkeys[group] = make([]string, 0)
+		}
+		groupkeys[group] = append(groupkeys[group], k)
 	}
 
-    for k := range groupkeys {
-        fmt.Println(k)
-    }
+	const SEPARATOR = "#"
+	const MAX_LEN = 80
+
+	for k := range groupkeys {
+		sep_size := ((MAX_LEN - utf8.RuneCountInString(k)) / 2) - 1
+		fmt.Print(strings.Repeat(SEPARATOR, sep_size) + " " + k + " " + strings.Repeat(SEPARATOR, sep_size))
+
+		if sep_size*2+utf8.RuneCountInString(k)+2 < MAX_LEN {
+			fmt.Print(SEPARATOR)
+		}
+		fmt.Print("\n")
+
+		for _, i := range groupkeys[k] {
+			fmt.Printf("%s %s\n", strings.Repeat(SEPARATOR, 2), c.GetDescription(i))
+			fmt.Printf("%s Defaults to: ", strings.Repeat(SEPARATOR, 2))
+			fmt.Print(c.GetDefault(i))
+			fmt.Printf("\n%s=", i)
+			v := reflect.ValueOf(c.Get(i))
+			switch v.Kind() {
+			case reflect.String:
+				fmt.Printf("\"%s\"\n", c.Get(i))
+				break
+			default:
+				fmt.Println(c.Get(i))
+			}
+		}
+		fmt.Print("\n")
+	}
 }
 
 func coerce(current interface{}, replacement string) (interface{}, error) {
