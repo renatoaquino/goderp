@@ -19,19 +19,19 @@ type Info struct {
 type Config struct {
 	Records       map[string]interface{}
 	Descriptions  map[string]Info
-	EnableEnvVars bool
+	enableEnvVars bool
 }
 
 func New() *Config {
 	c := Config{}
 	c.Records = make(map[string]interface{})
 	c.Descriptions = make(map[string]Info)
-	c.EnableEnvVars = false
+	c.enableEnvVars = false
 	return &c
 }
 
 func (c *Config) EnableEnv() {
-	c.EnableEnvVars = true
+	c.enableEnvVars = true
 }
 
 func (c *Config) Define(key string, value interface{}, descr string, group string) {
@@ -41,23 +41,33 @@ func (c *Config) Define(key string, value interface{}, descr string, group strin
 }
 
 func (c *Config) Get(key string) interface{} {
+	if c.enableEnvVars {
+		tmp := os.Getenv(key)
+		if tmp != "" {
+			value, err := coerce(c.Records[key], tmp)
+			if err != nil {
+				fmt.Printf("%s\n", err)
+			}
+			return value
+		}
+	}
 	return c.Records[key]
 }
 
 func (c *Config) GetInt(key string) int {
-	return c.Records[key].(int)
+	return c.Get(key).(int)
 }
 
 func (c *Config) GetFloat(key string) float64 {
-	return c.Records[key].(float64)
+	return c.Get(key).(float64)
 }
 
 func (c *Config) GetString(key string) string {
-	return c.Records[key].(string)
+	return c.Get(key).(string)
 }
 
 func (c *Config) GetBool(key string) bool {
-	return c.Records[key].(bool)
+	return c.Get(key).(bool)
 }
 
 func (c *Config) GetDescription(key string) string {
@@ -78,18 +88,6 @@ func (c *Config) Parse(filename string) (err error) {
 		return err
 	}
 
-	if c.EnableEnvVars {
-		var tmp string
-		for k := range c.Records {
-			tmp = os.Getenv(k)
-			if tmp != "" {
-				c.Records[k], err = coerce(c.Records[k], tmp)
-				if err != nil {
-					fmt.Printf("%s\n", err)
-				}
-			}
-		}
-	}
 	return nil
 }
 
